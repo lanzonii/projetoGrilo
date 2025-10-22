@@ -1,0 +1,8 @@
+psycopg2-binary
+langchain
+langchain_core
+langchain_community
+zoneinfo
+datetime
+pypdf
+faiss-cpu
