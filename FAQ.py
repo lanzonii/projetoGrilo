@@ -13,7 +13,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from utils import (
     today,
-    get_llm_fast,
+    llm_fast,
     get_session_history,
     embeddings
 )
@@ -24,7 +24,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 import os
 
-class FaqAgent(RunnableSequence):
+class FaqAgent():
 
     def __init__(self):
         PDF_PATH = 'faq_tools.pdf'
@@ -33,7 +33,7 @@ class FaqAgent(RunnableSequence):
         splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=150)
         chunks = splitter.split_documents(docs)
         db = FAISS.from_documents(chunks, embeddings)
-        super().__init__(self.get_chain(db))
+        self.chain = self.get_chain(db)
 
     def get_faq_context(self, question, db):
         results = db.similarity_search(question, k=6)
@@ -79,5 +79,4 @@ class FaqAgent(RunnableSequence):
              "Responda com base APENAS no CONTEXTO."))
         ])
 
-        return RunnablePassthrough.assign( question=itemgetter("input"), context= lambda x: self.get_faq_context(x['input'], db)) | prompt | get_llm_fast() | StrOutputParser()
-    
+        return (RunnablePassthrough.assign( question=itemgetter("input"), context= lambda x: self.get_faq_context(x['input'], db), chat_history=lambda x: []) | prompt | llm_fast | StrOutputParser())

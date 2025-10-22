@@ -11,7 +11,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from utils import (
     today,
-    get_llm_fast,
+    llm_fast,
     get_session_history
 )
 
@@ -114,7 +114,7 @@ class RouterAgent(RunnableWithMessageHistory):
             MessagesPlaceholder("chat_history"),
             ("human", "{input}")
         ]).partial(today_local=today.isoformat())
-        return prompt | get_llm_fast() | StrOutputParser()
+        return prompt | llm_fast | StrOutputParser()
     
     def __init__(self):
         super().__init__(
