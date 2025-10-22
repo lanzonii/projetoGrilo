@@ -11,7 +11,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from utils import (
     today,
-    llm_fast,
+    get_llm_fast,
     get_session_history
 )
 
@@ -30,18 +30,21 @@ class RouterAgent(RunnableWithMessageHistory):
 
                 ### PAPEL
                 - Acolher o usuário e manter o foco em FINANÇAS ou AGENDA/compromissos.
-                - Decidir a rota: {{financeiro | agenda | fora_escopo}}.
+                - Decidir a rota: {{financeiro | agenda | faq}}.
                 - Responder diretamente em:
                 (a) saudações/small talk, ou 
                 (b) fora de escopo (redirecionando para finanças/agenda).
                 - Seu objetivo é conversar de forma amigável com o usuário e tentar identificar se ele menciona algo sobre finanças ou agenda.
-                - Em fora_escopo: ofereça 1–2 sugestões práticas para voltar ao seu escopo (ex.: agendar algo, registrar/consultar um gasto).
                 - Quando for caso de especialista, NÃO responder ao usuário; apenas encaminhar a mensagem ORIGINAL e a PERSONA para o especialista.
 
 
                 ### REGRAS
                 - Seja breve, educado e objetivo.
                 - Se faltar um dado absolutamente essencial para decidir a rota, faça UMA pergunta mínima (CLARIFY). Caso contrário, deixe CLARIFY vazio.
+                - Se a mensagem do usuário for uma dúvida geral sobre o sistema, funcionalidades, regras ou políticas > ROUTE=faq
+                - Se for uma operação financeira, orçamento, transação > ROUTE=financeiro
+                - Se for sobre compromissos, eventos, lembretes > ROUTE=agenda
+                - Se fora_escopo: ofereça 1–2 sugestões práticas para voltar ao seu escopo (ex.: agendar algo, registrar/consultar um gasto).
                 - Responda de forma textual.
 
 
@@ -68,7 +71,7 @@ class RouterAgent(RunnableWithMessageHistory):
             AIMessagePromptTemplate.from_template("{ai}"),
         ])
 
-        shots_roteador = [
+        shots = [
             # 1) Saudação -> resposta direta
             {
                 "human": "Oi, tudo bem?",
@@ -94,10 +97,14 @@ class RouterAgent(RunnableWithMessageHistory):
                 "human": "Tenho reunião amanhã às 9h?",
                 "ai": "ROUTE=agenda\nPERGUNTA_ORIGINAL=Tenho reunião amanhã às 9h?\nPERSONA={PERSONA_SISTEMA}\nCLARIFY="
             },
+            {
+                "human": "Qual o e-mail do suporte?",
+                "ai": "ROUTE=faq\nPERGUNTA_ORIGINAL=Qual o e-mail do suporte?\nPERSONA={PERSONA_SISTEMA}\nCLARIFY="
+            }
         ]
 
         fewshots = FewShotChatMessagePromptTemplate(
-            examples=shots_roteador,
+            examples=shots,
             example_prompt=prompt_base
         )
         
@@ -107,7 +114,7 @@ class RouterAgent(RunnableWithMessageHistory):
             MessagesPlaceholder("chat_history"),
             ("human", "{input}")
         ]).partial(today_local=today.isoformat())
-        return prompt | llm_fast | StrOutputParser()
+        return prompt | get_llm_fast() | StrOutputParser()
     
     def __init__(self):
         super().__init__(

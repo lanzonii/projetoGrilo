@@ -8,106 +8,97 @@ from langchain.prompts.few_shot import FewShotChatMessagePromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 from utils import (
     today,
-    llm_fast,
+    get_llm,
     get_session_history
 )
+from pg_tools import AGENDA_TOOLS
 
-class RouterAgent(RunnableWithMessageHistory):
+class AgendaAgent(RunnableWithMessageHistory):
     def get_chain(self):
         system_prompt = ("system",
             """
-                ### PERSONA SISTEMA
-                Você é o Assessor.AI — um assistente pessoal de compromissos e finanças. É objetivo, responsável, confiável e empático, com foco em utilidade imediata. Seu objetivo é ser um parceiro confiável para o usuário, auxiliando-o a tomar decisões financeiras conscientes e a manter a vida organizada.
-                - Evite jargões.
-                - Evite ser prolixo.
-                - Não invente dados.
-                - Respostas sempre curtas e aplicáveis.
-                - Hoje é {today_local} (America/Sao_Paulo). Interprete datas relativas a partir desta data.
+            ### OBJETIVO
+            Interpretar a PERGUNTA_ORIGINAL sobre agenda/compromissos e (quando houver tools) consultar/criar/atualizar/cancelar eventos. 
+            A saída SEMPRE é JSON (contrato abaixo) para o Orquestrador.
 
 
-                ### PAPEL
-                - Acolher o usuário e manter o foco em FINANÇAS ou AGENDA/compromissos.
-                - Decidir a rota: {{financeiro | agenda | fora_escopo}}.
-                - Responder diretamente em:
-                (a) saudações/small talk, ou 
-                (b) fora de escopo (redirecionando para finanças/agenda).
-                - Seu objetivo é conversar de forma amigável com o usuário e tentar identificar se ele menciona algo sobre finanças ou agenda.
-                - Em fora_escopo: ofereça 1–2 sugestões práticas para voltar ao seu escopo (ex.: agendar algo, registrar/consultar um gasto).
-                - Quando for caso de especialista, NÃO responder ao usuário; apenas encaminhar a mensagem ORIGINAL e a PERSONA para o especialista.
+            ### TAREFAS
 
 
-                ### REGRAS
-                - Seja breve, educado e objetivo.
-                - Se faltar um dado absolutamente essencial para decidir a rota, faça UMA pergunta mínima (CLARIFY). Caso contrário, deixe CLARIFY vazio.
-                - Responda de forma textual.
+
+            ### CONTEXTO
+            - Hoje é {today_local} (America/Sao_Paulo). Interprete datas relativas a partir desta data.
+            - Entrada do Roteador:
+            - ROUTE=agenda
+            - PERGUNTA_ORIGINAL=...
+            - PERSONA=...   (use como diretriz de concisão/objetividade)
+            - CLARIFY=...   (se preenchido, responda primeiro)
 
 
-                ### PROTOCOLO DE ENCAMINHAMENTO (texto puro)
-                ROUTE=<financeiro|agenda>
-                PERGUNTA_ORIGINAL=<mensagem completa do usuário, sem edições>
-                PERSONA=<copie o bloco "PERSONA SISTEMA" daqui>
-                CLARIFY=<pergunta mínima se precisar; senão deixe vazio>
+            ### REGRAS
+            - Use o {chat_history} para resolver referências ao contexto recente.
 
 
-                ### SAÍDAS POSSÍVEIS
-                - Resposta direta (texto curto) quando saudação ou fora de escopo.
-                - Encaminhamento ao especialista usando exatamente o protocolo acima.
+            ### SAÍDA (JSON)
+            # Obrigatórios:
+            - dominio   : "agenda"
+            - intencao  : "consultar" | "criar" | "atualizar" | "cancelar" | "listar" | "disponibilidade" | "conflitos"
+            - resposta  : uma frase objetiva
+            - recomendacao : ação prática (pode ser string vazia)
+            # Opcionais (incluir só se necessário):
+            - acompanhamento : texto curto de follow-up/próximo passo
+            - esclarecer     : pergunta mínima de clarificação
+            - janela_tempo   : {{"de":"YYYY-MM-DDTHH:MM","ate":"YYYY-MM-DDTHH:MM","rotulo":"ex.: 'amanhã 09:00–10:00'"}}
+            - evento         : {{"titulo":"...","data":"YYYY-MM-DD","inicio":"HH:MM","fim":"HH:MM","local":"...","participantes":["..."]}}
 
 
-                ### HISTÓRICO DA CONVERSA
-                {chat_history}
-                
+            ### HISTÓRICO DA CONVERSA
+            {chat_history}
             """
         )
+
+
+        shots = [
+            {
+                "human": "ROUTE=agenda\nPERGUNTA_ORIGINAL=Tenho janela amanhã à tarde?\nPERSONA={PERSONA_SISTEMA}\nCLARIFY=",
+                "ai": """{{"dominio":"agenda","intencao":"disponibilidade","resposta":"Você está livre amanhã das 14:00 às 16:00.","recomendacao":"Quer reservar 15:00–16:00?","janela_tempo":{{"de":"2025-09-29T14:00","ate":"2025-09-29T16:00","rotulo":"amanhã 14:00–16:00"}}}}"""
+            },
+            {
+                "human": "ROUTE=agenda\nPERGUNTA_ORIGINAL=Marcar reunião com João amanhã às 9h por 1 hora\nPERSONA={PERSONA_SISTEMA}\nCLARIFY=",
+                "ai": """{{"dominio":"agenda","intencao":"criar","resposta":"Posso criar 'Reunião com João' amanhã 09:00–10:00.","recomendacao":"Confirmo o envio do convite?","janela_tempo":{{"de":"2025-09-29T09:00","ate":"2025-09-29T10:00","rotulo":"amanhã 09:00–10:00"}},"evento":{{"titulo":"Reunião com João","data":"2025-09-29","inicio":"09:00","fim":"10:00","local":"online"}}}}"""
+            },
+            {
+                "human": "ROUTE=agenda\nPERGUNTA_ORIGINAL=Agendar revisão do orçamento na sexta\nPERSONA={PERSONA_SISTEMA}\nCLARIFY=",
+                "ai": """{{"dominio":"agenda","intencao":"criar","resposta":"Preciso do horário para agendar.","recomendacao":"","esclarecer":"Qual horário você prefere na sexta?"}}"""
+            },
+        ]
         
         prompt_base = ChatPromptTemplate.from_messages([
             HumanMessagePromptTemplate.from_template("{human}"),
             AIMessagePromptTemplate.from_template("{ai}"),
         ])
 
-        shots_roteador = [
-            # 1) Saudação -> resposta direta
-            {
-                "human": "Oi, tudo bem?",
-                "ai": "Olá! Posso te ajudar com finanças ou agenda; por onde quer começar?"
-            },
-            # 2) Fora de escopo -> recusar e redirecionar
-            {
-                "human": "Me conta uma piada.",
-                "ai": "Consigo ajudar apenas com finanças ou agenda. Prefere olhar seus gastos ou marcar um compromisso?"
-            },
-            # 3) Finanças -> encaminhar (protocolo textual)
-            {
-                "human": "Quanto gastei com mercado no mês passado?",
-                "ai": "ROUTE=financeiro\nPERGUNTA_ORIGINAL=Quanto gastei com mercado no mês passado?\nPERSONA={PERSONA_SISTEMA}\nCLARIFY="
-            },
-            # 4) Ambíguo -> pedir 1 clarificação mínima (texto direto, sem encaminhar)
-            {
-                "human": "Agendar pagamento amanhã às 9h",
-                "ai": "Você quer lançar uma transação (finanças) ou criar um compromisso no calendário (agenda)?"
-            },
-            # 5) Agenda -> encaminhar (protocolo textual) — exemplo explícito
-            {
-                "human": "Tenho reunião amanhã às 9h?",
-                "ai": "ROUTE=agenda\nPERGUNTA_ORIGINAL=Tenho reunião amanhã às 9h?\nPERSONA={PERSONA_SISTEMA}\nCLARIFY="
-            },
-        ]
-
         fewshots = FewShotChatMessagePromptTemplate(
-            examples=shots_roteador,
+            examples=shots,
             example_prompt=prompt_base
         )
-        
+
         prompt = ChatPromptTemplate.from_messages([
             system_prompt,
             fewshots,
             MessagesPlaceholder("chat_history"),
-            ("human", "{input}")
+            ("human", "{input}"),
+            MessagesPlaceholder("agent_scratchpad")
         ]).partial(today_local=today.isoformat())
-        return prompt | llm_fast | StrOutputParser()
+        
+        agent = create_tool_calling_agent(get_llm(), AGENDA_TOOLS, prompt)
+        executor = AgentExecutor(agent=agent, tools=AGENDA_TOOLS, verbose=False)
+
+        return executor
     
     def __init__(self):
         super().__init__(

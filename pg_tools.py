@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import psycopg2
 from typing import Optional
 from langchain.tools import tool
-from langchain.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -216,3 +216,5 @@ def daily_balance(date_local: str) -> dict:
 
 
 TOOLS = [add_transaction, query_transactions, total_balance, daily_balance]
+
+AGENDA_TOOLS = []
