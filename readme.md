@@ -11,4 +11,4 @@
 #### Por isso, eu separei um arquivo pra cada agente e um "utils", que contempla as coisas em comum deles, como o llm, e etc.
 ### A estrutura dos arquivos de agente consiste na mesma coisa do grilo só que em uma classe, que geralmente herda do RunnableWithMessageHistory
 
-# NAO TA RODANDO AINDA MAS VOU FAZER RODAR!!
+# FAQ RODOU!!!
