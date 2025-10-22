@@ -8,7 +8,7 @@ router_chain = RouterAgent()
 orchestrator_chain = OrchestratorAgent()
 financial_chain = FinancialAgent()
 agenda_chain = AgendaAgent()
-faq_chain = FaqAgent()
+faq_chain = FaqAgent().chain
 
 def executar_fluxo_acessor(user_input, session_id) -> str:
     global router_chain
@@ -17,15 +17,14 @@ def executar_fluxo_acessor(user_input, session_id) -> str:
             config={'configurable': {'session_id': session_id}}
         )
     if 'ROUTE=' in resposta_roteador:
-
         resposta = dict([tuple(i.split('=')) for i in resposta_roteador.split('\n')])
 
         if resposta['ROUTE'] == 'faq':
-            return faq_chain.invoke(resposta['PERGUNTA_ORIGINAL'])
+            return faq_chain.invoke({'input': resposta_roteador})
         elif resposta['ROUTE'] == 'financeiro':
-            return financial_chain.invoke(resposta['PERGUNTA_ORIGINAL'])
+            return financial_chain.invoke({'input': resposta_roteador}, config={'configurable': {'session_id': session_id}})
         elif resposta['ROUTE'] == 'agenda':
-            return agenda_chain.invoke(resposta['PERGUNTA_ORIGINAL']) 
+            return agenda_chain.invoke({'input': resposta_roteador}, config={'configurable': {'session_id': session_id}}) 
     else:
         return resposta_roteador
 

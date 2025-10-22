@@ -12,7 +12,7 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 from utils import (
     today,
-    get_llm,
+    llm,
     get_session_history
 )
 from pg_tools import TOOLS
@@ -98,7 +98,7 @@ class FinancialAgent(RunnableWithMessageHistory):
             MessagesPlaceholder("agent_scratchpad")
         ]).partial(today_local=today.isoformat())
         
-        agent = create_tool_calling_agent(get_llm(), TOOLS, prompt)
+        agent = create_tool_calling_agent(llm, TOOLS, prompt)
         executor = AgentExecutor(agent=agent, tools=TOOLS, verbose=False)
 
         return executor

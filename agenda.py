@@ -12,7 +12,7 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 from utils import (
     today,
-    get_llm,
+    llm,
     get_session_history
 )
 from pg_tools import AGENDA_TOOLS
@@ -95,7 +95,7 @@ class AgendaAgent(RunnableWithMessageHistory):
             MessagesPlaceholder("agent_scratchpad")
         ]).partial(today_local=today.isoformat())
         
-        agent = create_tool_calling_agent(get_llm(), AGENDA_TOOLS, prompt)
+        agent = create_tool_calling_agent(llm, AGENDA_TOOLS, prompt)
         executor = AgentExecutor(agent=agent, tools=AGENDA_TOOLS, verbose=False)
 
         return executor

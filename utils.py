@@ -22,18 +22,17 @@ def get_session_history(session_id):
 
 load_dotenv()
 
-def get_llm():
-    return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0.7,
-        top_p=0.95,
-        google_api_key=os.getenv("GEMINI_API_KEY")
-    )
-def get_llm_fast():
-    return ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        temperature=0,
-        google_api_key=os.getenv("GEMINI_API_KEY")
-    )
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0.7,
+    top_p=0.95,
+    google_api_key=os.getenv("GEMINI_API_KEY")
+)
+
+llm_fast = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    temperature=0,
+    google_api_key=os.getenv("GEMINI_API_KEY")
+)
 
 embeddings = GoogleGenerativeAIEmbeddings(model="text-embedding-004", google_api_key=os.getenv('GEMINI_API_KEY'))
