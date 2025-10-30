@@ -6,3 +6,4 @@ zoneinfo
 datetime
 pypdf
 faiss-cpu
+langgraph
