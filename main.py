@@ -111,11 +111,7 @@ graph.add_conditional_edges(
     decide_after_specialist,
     {"orquestrador": "orquestrador", "end": END},
 )
-graph.add_conditional_edges(
-    "faq",
-    decide_after_specialist,
-    {"orquestrador": "orquestrador", "end": END},
-)
+graph.add_edge("faq", END)
 
 graph.add_edge("orquestrador", END)
 
